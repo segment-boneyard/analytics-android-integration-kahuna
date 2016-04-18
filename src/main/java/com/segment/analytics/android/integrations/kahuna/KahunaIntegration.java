@@ -4,10 +4,13 @@ import android.app.Activity;
 import android.content.Context;
 import android.text.TextUtils;
 import com.kahuna.sdk.EmptyCredentialsException;
+import com.kahuna.sdk.Event;
+import com.kahuna.sdk.EventBuilder;
 import com.kahuna.sdk.IKahuna;
 import com.kahuna.sdk.IKahunaUserCredentials;
 import com.kahuna.sdk.Kahuna;
 import com.segment.analytics.Analytics;
+import com.segment.analytics.Properties;
 import com.segment.analytics.Traits;
 import com.segment.analytics.ValueMap;
 import com.segment.analytics.integrations.IdentifyPayload;
@@ -141,27 +144,36 @@ public class KahunaIntegration extends Integration<Void> {
   @Override public void track(TrackPayload track) {
     super.track(track);
 
-    String event = track.event();
-    if ("Viewed Product Category".equalsIgnoreCase(event)) {
+    String eventName = track.event();
+    if ("Viewed Product Category".equalsIgnoreCase(eventName)) {
       trackViewedProductCategory(track);
-    } else if ("Viewed Product".equalsIgnoreCase(event)) {
+    } else if ("Viewed Product".equalsIgnoreCase(eventName)) {
       trackViewedProduct(track);
       trackViewedProductCategory(track);
-    } else if ("Added Product".equalsIgnoreCase(event)) {
+    } else if ("Added Product".equalsIgnoreCase(eventName)) {
       trackAddedProduct(track);
       trackAddedProductCategory(track);
-    } else if ("Completed Order".equalsIgnoreCase(event)) {
+    } else if ("Completed Order".equalsIgnoreCase(eventName)) {
       trackCompletedOrder(track);
     }
 
-    int quantity = track.properties().getInt("quantity", -1);
-    double revenue = track.properties().revenue();
-    if (quantity == -1 && revenue == 0) {
-      kahuna.trackEvent(event);
-    } else {
-      // Kahuna requires revenue in cents.
-      kahuna.trackEvent(event, quantity, (int) (revenue * 100));
+    kahuna.track(getKahunaEventForSegmentEventNameAndProperties(eventName, track.properties()));
+  }
+
+  Event getKahunaEventForSegmentEventNameAndProperties(String eventName, Properties properties) {
+    EventBuilder eventBuilder = new EventBuilder(eventName);
+    for (String propertyKey : properties.keySet()) {
+      eventBuilder.addProperty(propertyKey, properties.getString(propertyKey));
     }
+
+    int quantity = properties.getInt("quantity", -1);
+    double revenue = properties.revenue();
+    if (quantity != -1 || revenue != 0) {
+      // Kahuna requires revenue in cents.
+      eventBuilder.setPurchaseData(quantity, (int) (revenue * 100));
+    }
+
+    return eventBuilder.build();
   }
 
   void trackViewedProductCategory(TrackPayload track) {
@@ -230,7 +242,8 @@ public class KahunaIntegration extends Integration<Void> {
     super.screen(screen);
 
     if (trackAllPages) {
-      kahuna.trackEvent(String.format("Viewed %s Screen", screen.event()));
+      String eventName = String.format("Viewed %s Screen", screen.event());
+      kahuna.track(getKahunaEventForSegmentEventNameAndProperties(eventName, screen.properties()));
     }
   }
 
